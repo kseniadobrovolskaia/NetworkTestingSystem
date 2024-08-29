@@ -1,0 +1,13 @@
+{
+  "TestName" : "MyTest",
+  "Questions" : [
+  	{ "Formulation" : "My first question?",
+  	  "Answers" : ["yes", "no", "oy"],
+  	  "CorrectAnswer" : "yes"
+  	}, 
+  	{ "Formulation" : "My second question?",
+  	  "Answers" : ["iha"],
+  	  "CorrectAnswer" : "iha"
+  	}
+  ]
+}
