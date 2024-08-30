@@ -8,7 +8,9 @@ add_compile_options(-std=c++20 -fPIC)
 find_package(PkgConfig)
 pkg_check_modules(GTKMM REQUIRED gtkmm-3.0)
 
-include_directories(${CMAKE_SOURCE_DIR}/GUI/include ${GTKMM_INCLUDE_DIRS})
+include_directories(${CMAKE_SOURCE_DIR}/GUI/include
+                    ${CMAKE_SOURCE_DIR}/TestSystem/include
+                    ${GTKMM_INCLUDE_DIRS})
 link_directories(${GTKMM_LIBRARY_DIRS})
 
 set(SOURCE_LIB lib/GUI_Window.cpp)
@@ -16,5 +18,5 @@ set(SOURCE_LIB lib/GUI_Window.cpp)
 add_library(GUI_Window STATIC ${SOURCE_LIB})
 
 add_executable(showWindow main.cpp)
-target_link_libraries(showWindow GUI_Window ${GTKMM_LIBRARIES})
+target_link_libraries(showWindow GUI_Window TestSystem ${GTKMM_LIBRARIES})
 

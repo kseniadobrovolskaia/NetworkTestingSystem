@@ -17,6 +17,8 @@ class Question {
     Question() = default;
     virtual ~Question() {}
     virtual void print() const = 0;
+    virtual const std::string &formulation() const = 0;
+    virtual std::string &formulation() = 0;
 
     // To work with json parsing
     virtual void toJson(nlohmann::json &J) const = 0;
@@ -43,18 +45,21 @@ class OneAnswerQuestion : public Question {
       : Answers(Q.Answers), CorrectAnswer(Q.CorrectAnswer), Formulation(Q.Formulation) {};
     OneAnswerQuestion(const std::string &F)
       : Formulation(F) {};
-    std::string &formulation() { return Formulation; }
+    const std::string &formulation() const override { return Formulation; }
+    std::string &formulation() override { return Formulation; }
+    const std::string &correctAnswer() const { return CorrectAnswer; }
     std::string &correctAnswer() { return CorrectAnswer; }
+    const std::vector<std::string> &answers() const { return Answers; }
     std::vector<std::string> &answers() { return Answers; }
 
     void print() const override {
       std::cout << "Question with one correct answer: \n";
-      std::cout << "\n  Formulation: " << Formulation << "\n";
-      std::cout << "\n  Answers: \n";
+      std::cout << "\n    Formulation: " << Formulation << "\n";
+      std::cout << "\n    Answers: \n";
       std::for_each(Answers.begin(), Answers.end(), [Idx = 0] (const auto &A) mutable {
-        std::cout << "  " << ++Idx << ". " << A << "\n";
+        std::cout << "      " << ++Idx << ". " << A << "\n";
       });
-      std::cout << "\n  Correct answer: " << CorrectAnswer << "\n";
+      std::cout << "\n    Correct answer: " << CorrectAnswer << "\n";
     }
 
 
@@ -76,14 +81,15 @@ class OneAnswerQuestion : public Question {
 //___________________________________Test Paper__________________________________________
 
 class TestPaper {
-  std::vector<std::unique_ptr<Question>> Questions; 
+  std::vector<OneAnswerQuestion> Questions; 
   std::string Name = "";
 
   public:
     TestPaper() = default;
     TestPaper(const std::string &Name) : Name(Name) {}
     const std::string &name() const { return Name; }
-    const std::vector<std::unique_ptr<Question>> &questions() const { return Questions; }
+    const std::vector<OneAnswerQuestion> &questions() const { return Questions; }
+    std::vector<OneAnswerQuestion> &questions() { return Questions; }
     size_t countQuestions() const { return Questions.size(); }
     
     //void addQuestion(const OneAnswerQuestion &Q) { Questions.emplace_back(std::make_unique(Q)); }
@@ -93,7 +99,7 @@ class TestPaper {
       std::cout << "Questions :\n";
       std::for_each(Questions.begin(), Questions.end(), [Idx = 0] (const auto &Q) mutable {
         std::cout << "  " << ++Idx << ". ";
-        Q->print();
+        Q.print();
         std::cout << "\n";
       });
     }
@@ -102,22 +108,12 @@ class TestPaper {
 
     void toJson(nlohmann::json &J) const {
       J["TestName"] = Name;
-      std::vector<OneAnswerQuestion> Qs;
-      Qs.reserve(Questions.size());
-      for (auto Idx = 0; Idx < Questions.size(); ++Idx)
-        Qs.emplace_back(*static_cast<OneAnswerQuestion*>(Questions[Idx].get()));
-
-      J["Questions"] = Qs;
+      J["Questions"] = Questions;
     }
     
     void fromJson(const nlohmann::json &J) {
       J.at("TestName").get_to(Name);
-
-      std::vector<OneAnswerQuestion> Qs;
-      J.at("Questions").get_to(Qs);
-      std::transform(Qs.begin(), Qs.end(), std::back_inserter(Questions), [](const auto &Q) {
-        return std::make_unique<OneAnswerQuestion>(Q);
-      });
+      J.at("Questions").get_to(Questions);
     }
 
 

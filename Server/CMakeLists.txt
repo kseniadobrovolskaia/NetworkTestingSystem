@@ -8,6 +8,6 @@ include_directories(${CMAKE_SOURCE_DIR}/TestSystem/include)
 
 set(SOURCE_LIB lib/Server.cpp)
 
-add_executable(${EXEC_NAME} ${SOURCE_LIB})
+add_executable(${EXEC_NAME} main.cpp ${SOURCE_LIB})
 target_link_libraries(${EXEC_NAME} TestSystem)
 
