@@ -16,7 +16,3 @@ link_directories(${GTKMM_LIBRARY_DIRS})
 set(SOURCE_LIB lib/GUI_Window.cpp)
 
 add_library(GUI_Window STATIC ${SOURCE_LIB})
-
-add_executable(showWindow main.cpp)
-target_link_libraries(showWindow GUI_Window TestSystem ${GTKMM_LIBRARIES})
-

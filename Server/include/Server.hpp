@@ -1,23 +1,24 @@
+#include <fstream>
+#include <netinet/in.h>
+#include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <sys/types.h> 
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <fstream>
-#include <sstream>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "TestSystem.h"
 
-void failWithError(const char *Message);
+namespace TestServer {
 
-int calculateMark(std::vector<unsigned> final_results, std::vector<unsigned> right_answers);
+void failWithError(const std::string &Msg);
 
-void createAction();
-
-void saveAction();
-
-void runFromFileAction();
+int calculateMark(std::vector<unsigned> ClientAnswers,
+                  std::vector<unsigned> CorrectAnswers);
 
 void chooseAction();
+void createAction();
+void saveAction();
+void runFromFileAction();
 
+} // namespace TestServer

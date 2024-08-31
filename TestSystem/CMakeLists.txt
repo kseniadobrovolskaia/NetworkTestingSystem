@@ -11,6 +11,3 @@ set(SOURCE_LIB lib/TestSystem.cpp)
 
 add_library(TestSystem STATIC ${SOURCE_LIB})
 
-add_executable(testExample main.cpp)
-target_link_libraries(testExample TestSystem)
-

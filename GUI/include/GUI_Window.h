@@ -1,29 +1,33 @@
 #ifndef GUI_WINDOW_H
 #define GUI_WINDOW_H
 
+#include "TestSystem.h"
 #include <gtkmm.h>
 #include <string>
-#include "TestSystem.h"
 
-class ExampleWindow : public Gtk::Dialog
-{
+namespace GUI {
+
+//____________________________________Test
+//Window________________________________________
+
+class TestWindow : public Gtk::Dialog {
 public:
-  ExampleWindow(const TestSystem::TestPaper &Test);
-  virtual ~ExampleWindow();
-  std::string getResults() const;
-  std::vector<unsigned> getFinalResults() const;
-  void addTest(const TestSystem::TestPaper &Test);
+  TestWindow(const TestSystem::TestPaper &Test);
+  std::vector<unsigned> getFinalResults() const { return FinalResults; }
+  Gtk::Grid &getGrid() { return Grid; }
+
+  // Signal handlers
+  void handleButtonAnswer(int i, int j);
+  void handleButtonClose();
 
 protected:
-  //Signal handlers:
-  void on_button_clicked(int i, int j);
-  void on_button_close();
-
-  //Child widgets:
-  Gtk::ScrolledWindow m_ScrolledWindow;
-  Gtk::Grid m_Grid;
-  Gtk::Button m_Button_Close;
+  // Child widgets
+  Gtk::ScrolledWindow ScrolledWindow;
+  Gtk::Grid Grid;
+  Gtk::Button ButtonClose;
   std::vector<unsigned> FinalResults;
 };
 
-#endif //GUI_WINDOW_H
+} // namespace GUI
+
+#endif // GUI_WINDOW_H
