@@ -1,86 +1,106 @@
 #include "Client.hpp"
+#include <getopt.h>
 
-int main(int argc, char *argv[]) {
-  int sockfd, portno, n;
-  struct sockaddr_in serv_addr;
-  struct hostent *server;
+namespace TestClient {
 
-  if (argc < 3) {
-    std::cerr << "Usage: " << argv[0] << " HOSTNAME PORT\n";
-    exit(0);
+static std::optional<const char *> ServerHostname;
+static std::optional<unsigned> Port;
+
+// clang-format off
+static struct option CmdLineOpts[] = {
+    {"help",             no_argument,        0,  'h'},
+    {"port",             required_argument,  0,  'p'},
+    {"server-hostname",  required_argument,  0,  's'},
+    {0,                  0,                  0,   0 }};
+// clang-format on
+
+static void printHelp(const char *ProgName, int ErrorCode) {
+  std::cerr << "USAGE:     " << ProgName << "   [options]\n\n";
+  std::cerr << "OPTIONS: \n";
+  struct option *opt = CmdLineOpts;
+  while (opt->name) {
+    if (isprint(opt->val))
+      std::cerr << "\t   -" << static_cast<char>(opt->val) << "\t --"
+                << opt->name << "\n";
+    else
+      std::cerr << "\t     \t --" << opt->name << "\n";
+    opt++;
+  }
+  exit(ErrorCode);
+}
+
+/**
+ * @brief setValue - it helps process incorrect values, which are given
+ *                   for unsigned argument.
+ */
+static void setValue(const char *NameValue, const char *GivenValue,
+                     std::optional<unsigned> &SetVar) {
+  // find sign
+  while (isspace((unsigned char)*GivenValue))
+    GivenValue++;
+  char Sign = *GivenValue;
+  char *Endptr; //  Store the location where conversion stopped
+  unsigned TryValue = strtoul(GivenValue, &Endptr, /* base */ 10);
+
+  if (GivenValue == Endptr)
+    failWithError("Invalid " + std::string(NameValue) + " " +
+                  std::string(GivenValue) + " provided");
+  else if (*Endptr)
+    failWithError("Extra text after " + std::string(NameValue));
+  else if (Sign == '-' && TryValue != 0)
+    failWithError("Negative " + std::string(NameValue));
+  SetVar = TryValue;
+}
+
+/**
+ * @brief parseCmdLine - it parses the command line arguments.
+ */
+static void parseCmdLine(int Argc, char **Argv) {
+  int NextOpt;
+  while (true) {
+    NextOpt = getopt_long(Argc, Argv,
+                          "h"
+                          "p:"
+                          "s:",
+                          CmdLineOpts, NULL);
+    if (NextOpt == -1)
+      break;
+    switch (NextOpt) {
+    case 'p':
+      setValue("port", optarg, Port);
+      break;
+    case 'h':
+      printHelp(Argv[0], 0);
+      break;
+    case 's':
+      ServerHostname = optarg;
+      break;
+    case '?':
+      printHelp(Argv[0], 1);
+      break;
+    }
+  }
+  if (!Port.has_value()) {
+    std::cerr << "Port must be provided\n\n";
+    printHelp(Argv[0], 1);
+  }
+  if (!ServerHostname.has_value()) {
+    std::cerr << "Server-hostname must be provided\n\n";
+    printHelp(Argv[0], 1);
+  }
+}
+
+} // namespace TestClient
+
+int main(int Argc, char *Argv[]) {
+  try {
+    TestClient::parseCmdLine(Argc, Argv);
+    TestClient::startTesting(TestClient::Port.value(),
+                             TestClient::ServerHostname.value());
+  } catch (std::exception &Ex) {
+    std::cout << Ex.what() << "\n";
+    exit(EXIT_FAILURE);
   }
 
-  int PORT = atoi(argv[2]);
-  const char *HOST_NAME = argv[1];
-
-  argc = 1;
-  portno = PORT;
-  sockfd = socket(AF_INET, SOCK_STREAM, 0);
-  if (sockfd < 0)
-    failWithError("ERROR opening socket");
-  server = gethostbyname(HOST_NAME);
-  if (server == NULL)
-    failWithError("ERROR, no such host\n");
-  bzero((char *)&serv_addr, sizeof(serv_addr));
-  serv_addr.sin_family = AF_INET;
-  bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr,
-        server->h_length);
-  serv_addr.sin_port = htons(portno);
-  if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-    failWithError("ERROR connecting");
-
-  // Test recives
-
-  char str[10000];
-  size_t size;
-  n = read(sockfd, reinterpret_cast<char *>(str), sizeof(str));
-  nlohmann::json data = nlohmann::json::parse(str);
-  if (n < 0)
-    failWithError("ERROR reading from socket");
-
-  std::cout << "Please choose answers on test in window :D\n\n";
-  // Convert json format test to GUI and open GUI_Window
-
-  Glib::RefPtr<Gtk::Application> app =
-      Gtk::Application::create(argc, argv, "org.gtkmm.example");
-
-  auto Test = data.template get<TestSystem::TestPaper>();
-  GUI::TestWindow Window(Test);
-
-  // Answers using GUI
-  app->run(Window);
-
-  // Send results
-  auto FinalResults = Window.getFinalResults();
-  n = write(sockfd, FinalResults.data(), sizeof(FinalResults));
-  if (n < 0)
-    failWithError("ERROR writing to socket");
-
-  std::cout << "Your answers: ";
-  for (auto A : FinalResults)
-    std::cout << A + 1 << " ";
-  std::cout << "\n";
-
-  // Recive rignt answers
-  std::vector<unsigned> right_answers(FinalResults.size());
-  n = read(sockfd, right_answers.data(), sizeof(FinalResults));
-  if (n < 0)
-    failWithError("ERROR reading from socket");
-
-  std::cout << "\nRight answers: ";
-  for (auto A : right_answers)
-    std::cout << A + 1 << " ";
-  std::cout << "\n";
-
-  // Recive mark
-  char mark[2];
-  n = read(sockfd, mark, 1);
-  mark[1] = '\0';
-  if (n < 0)
-    failWithError("ERROR reading from socket");
-
-  std::cout << "\n\nYour mark " << mark << "!\n";
-
-  close(sockfd);
   return 0;
 }

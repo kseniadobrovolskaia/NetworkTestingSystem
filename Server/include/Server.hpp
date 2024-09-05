@@ -16,6 +16,9 @@ void failWithError(const std::string &Msg);
 int calculateMark(std::vector<unsigned> ClientAnswers,
                   std::vector<unsigned> CorrectAnswers);
 
+void serveTheClient(int sockfd, const std::string &TestStr,
+                    const std::vector<unsigned> &CorrectAnswers);
+
 void chooseAction();
 void createAction();
 void saveAction();

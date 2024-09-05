@@ -11,4 +11,10 @@
 #include "GUI_Window.h"
 #include <gtkmm/application.h>
 
-void failWithError(const char *Message);
+namespace TestClient {
+
+void failWithError(const std::string &Msg);
+
+void startTesting(unsigned Port, const std::string &ServerHostname);
+
+} // namespace TestClient

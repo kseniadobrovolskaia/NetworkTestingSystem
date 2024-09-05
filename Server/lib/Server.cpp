@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include <signal.h>
 
 namespace TestServer {
 
@@ -18,7 +19,7 @@ int calculateMark(std::vector<unsigned> ClientAnswers,
 }
 
 static void runTest(TestSystem::TestPaper &Test) {
-  // Delete correct answers
+  // Delete correct answers and save them in vector
   std::vector<unsigned> CorrectAnswers;
   CorrectAnswers.reserve(Test.questions().size());
 
@@ -30,11 +31,15 @@ static void runTest(TestSystem::TestPaper &Test) {
     CorrectAnswers.push_back(Position);
     Q.correctAnswer() = "";
   }
+  // Prepare test in string format
+  nlohmann::json newJson = Test;
+  to_json(newJson, Test);
+  std::string TestStr = newJson.dump();
 
-  int sockfd, newsockfd, portno;
+  // Socket to accept client's connections
+  int sockfd, newsockfd, portno, pid;
   socklen_t clilen;
   struct sockaddr_in serv_addr, cli_addr;
-  int n;
 
   std::cout << "Введите номер порта:\n";
   std::cin >> portno;
@@ -51,43 +56,57 @@ static void runTest(TestSystem::TestPaper &Test) {
     failWithError("ERROR on binding");
   listen(sockfd, 5);
   clilen = sizeof(cli_addr);
-  newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
-  if (newsockfd < 0)
-    failWithError("ERROR on accept");
 
-  nlohmann::json newJson = Test;
-  to_json(newJson, Test);
-  std::string str = newJson.dump();
+  // To kill zombie child processes
+  signal(SIGCHLD, SIG_IGN);
+  while (true) {
+    newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
+    if (newsockfd < 0)
+      failWithError("ERROR on accept");
+    pid = fork();
+    if (pid < 0)
+      failWithError("ERROR on fork");
+    if (pid == 0) {
+      close(sockfd);
+      serveTheClient(newsockfd, TestStr, CorrectAnswers);
+      exit(EXIT_SUCCESS);
+    } else
+      close(newsockfd);
+  }
+
+  close(sockfd);
+}
+
+// There is a separate instance of this function
+// for each connection.  It handles all communication
+// once a connnection has been established.
+
+void serveTheClient(int sockfd, const std::string &TestStr,
+                    const std::vector<unsigned> &CorrectAnswers) {
+  int n;
 
   // Send test without right answers
-  n = write(newsockfd, str.c_str(), str.size());
+  n = write(sockfd, TestStr.c_str(), TestStr.size());
   if (n < 0)
     failWithError("ERROR writing to socket");
 
   // Read Answer
   std::vector<unsigned> ClientAnswers(CorrectAnswers.size());
-  n = read(newsockfd, ClientAnswers.data(), sizeof(CorrectAnswers));
+  n = read(sockfd, ClientAnswers.data(), sizeof(CorrectAnswers));
   if (n < 0)
     failWithError("ERROR reading from socket");
 
-  for (auto A : ClientAnswers)
-    std::cout << A << " ";
-  std::cout << "\n";
-
   // Send right answers
-  n = write(newsockfd, CorrectAnswers.data(), sizeof(CorrectAnswers));
+  n = write(sockfd, CorrectAnswers.data(), sizeof(CorrectAnswers));
   if (n < 0)
     failWithError("ERROR writing to socket");
 
   // Send mark
   n = write(
-      newsockfd,
+      sockfd,
       std::to_string(calculateMark(ClientAnswers, CorrectAnswers)).c_str(), 1);
   if (n < 0)
     failWithError("ERROR writing to socket");
-
-  close(newsockfd);
-  close(sockfd);
 }
 
 static TestSystem::OneAnswerQuestion getQuestion(unsigned NumQuestion) {
