@@ -57,7 +57,6 @@ void startTesting(unsigned Port, const std::string &ServerHostname) {
   std::cout << "Your answers: ";
   for (auto A : FinalResults)
     std::cout << A + 1 << " ";
-  std::cout << "\n";
 
   // Recive rignt answers
   std::vector<unsigned> right_answers(FinalResults.size());

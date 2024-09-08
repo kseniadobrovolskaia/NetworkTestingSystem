@@ -22,7 +22,7 @@ int calculateMark(std::vector<unsigned> ClientAnswers,
 // Set in the SIG_INT signal handler.
 volatile bool Exit = false;
 
-static void runTest(TestSystem::TestPaper &Test) {
+static void runTest(TestSystem::TestPaper &Test, unsigned portno) {
   // This is a reasonable value for the number of clients
   // waiting for a response from the server on many platforms.
   constexpr unsigned MaxClientsQueue = 5;
@@ -44,12 +44,9 @@ static void runTest(TestSystem::TestPaper &Test) {
   std::string TestStr = newJson.dump();
 
   // Socket to accept client's connections
-  int sockfd, newsockfd, portno, pid;
+  int sockfd, newsockfd, pid;
   socklen_t clilen;
   struct sockaddr_in serv_addr, cli_addr;
-
-  std::cout << "Введите номер порта:\n";
-  std::cin >> portno;
 
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
   if (sockfd < 0)
@@ -180,10 +177,17 @@ static TestSystem::TestPaper getTestPaper() {
   return Test;
 }
 
+static unsigned getPort() {
+  unsigned portno;
+  std::cout << "Введите номер порта:\n";
+  std::cin >> portno;
+  return portno;
+}
+
 void createAction() {
   TestSystem::TestPaper Test = getTestPaper();
 
-  runTest(Test);
+  runTest(Test, getPort());
 }
 
 void saveAction() {
@@ -200,22 +204,28 @@ void saveAction() {
   std::cout << "Тест сохранён в файле " << FileName << ".\n";
 }
 
-void runFromFileAction() {
+void exitHandler(int Signo) {
+  std::cout << "\nРабота сервера завершена.\n";
+  Exit = true;
+  exit(EXIT_SUCCESS);
+}
+
+void runFromFileAction(const std::string &TestFile, unsigned Port) {
+  // To exit
+  signal(SIGINT, exitHandler);
+  std::ifstream f(TestFile);
+  nlohmann::json data = nlohmann::json::parse(f);
+
+  auto Test = data.template get<TestSystem::TestPaper>();
+  runTest(Test, Port);
+}
+
+static void runFromFileAction() {
   std::cout << "Введите путь до файла с тестом:\n";
   std::string FilePath;
   std::cin >> FilePath;
 
-  std::ifstream f(FilePath);
-  nlohmann::json data = nlohmann::json::parse(f);
-
-  auto Test = data.template get<TestSystem::TestPaper>();
-  runTest(Test);
-}
-
-void exitHandler(int Signo) {
-  std::cout << "Работа сервера завершена.\n";
-  Exit = true;
-  exit(EXIT_SUCCESS);
+  runFromFileAction(FilePath, getPort());
 }
 
 void chooseAction() {

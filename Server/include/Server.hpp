@@ -22,6 +22,6 @@ void serveTheClient(int sockfd, const std::string &TestStr,
 void chooseAction();
 void createAction();
 void saveAction();
-void runFromFileAction();
+void runFromFileAction(const std::string &TestFile, unsigned Port);
 
 } // namespace TestServer
