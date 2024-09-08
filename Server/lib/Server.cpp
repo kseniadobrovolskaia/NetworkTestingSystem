@@ -18,7 +18,14 @@ int calculateMark(std::vector<unsigned> ClientAnswers,
   return NumOfCorrect * BestMark / ClientAnswers.size();
 }
 
+// To shut down the server.
+// Set in the SIG_INT signal handler.
+volatile bool Exit = false;
+
 static void runTest(TestSystem::TestPaper &Test) {
+  // This is a reasonable value for the number of clients
+  // waiting for a response from the server on many platforms.
+  constexpr unsigned MaxClientsQueue = 5;
   // Delete correct answers and save them in vector
   std::vector<unsigned> CorrectAnswers;
   CorrectAnswers.reserve(Test.questions().size());
@@ -43,7 +50,6 @@ static void runTest(TestSystem::TestPaper &Test) {
 
   std::cout << "Введите номер порта:\n";
   std::cin >> portno;
-  std::cout << "Тест запущен!\n";
 
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
   if (sockfd < 0)
@@ -57,9 +63,10 @@ static void runTest(TestSystem::TestPaper &Test) {
   listen(sockfd, 5);
   clilen = sizeof(cli_addr);
 
+  std::cout << "Тест запущен!\n";
   // To kill zombie child processes
   signal(SIGCHLD, SIG_IGN);
-  while (true) {
+  while (!Exit) {
     newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
     if (newsockfd < 0)
       failWithError("ERROR on accept");
@@ -77,36 +84,40 @@ static void runTest(TestSystem::TestPaper &Test) {
   close(sockfd);
 }
 
-// There is a separate instance of this function
-// for each connection.  It handles all communication
-// once a connnection has been established.
+static void writeWithCheck(int fd, const void *buf, size_t count,
+                           const std::string &Msg) {
+  if (write(fd, buf, count) < 0)
+    failWithError(Msg);
+}
 
+static void readWithCheck(int fd, void *buf, size_t count,
+                          const std::string &Msg) {
+  if (read(fd, buf, count) < 0)
+    failWithError(Msg);
+}
+
+// There is a function for each connection. It handles all
+// communication once a connnection has been established.
 void serveTheClient(int sockfd, const std::string &TestStr,
                     const std::vector<unsigned> &CorrectAnswers) {
-  int n;
-
   // Send test without right answers
-  n = write(sockfd, TestStr.c_str(), TestStr.size());
-  if (n < 0)
-    failWithError("ERROR writing to socket");
+  writeWithCheck(sockfd, TestStr.c_str(), TestStr.size(),
+                 "ERROR writing to socket");
 
   // Read Answer
   std::vector<unsigned> ClientAnswers(CorrectAnswers.size());
-  n = read(sockfd, ClientAnswers.data(), sizeof(CorrectAnswers));
-  if (n < 0)
-    failWithError("ERROR reading from socket");
+  readWithCheck(sockfd, ClientAnswers.data(), sizeof(CorrectAnswers),
+                "ERROR reading from socket");
 
   // Send right answers
-  n = write(sockfd, CorrectAnswers.data(), sizeof(CorrectAnswers));
-  if (n < 0)
-    failWithError("ERROR writing to socket");
+  writeWithCheck(sockfd, CorrectAnswers.data(), sizeof(CorrectAnswers),
+                 "ERROR writing to socket");
 
   // Send mark
-  n = write(
+  writeWithCheck(
       sockfd,
-      std::to_string(calculateMark(ClientAnswers, CorrectAnswers)).c_str(), 1);
-  if (n < 0)
-    failWithError("ERROR writing to socket");
+      std::to_string(calculateMark(ClientAnswers, CorrectAnswers)).c_str(), 1,
+      "ERROR writing to socket");
 }
 
 static TestSystem::OneAnswerQuestion getQuestion(unsigned NumQuestion) {
@@ -201,7 +212,15 @@ void runFromFileAction() {
   runTest(Test);
 }
 
+void exitHandler(int Signo) {
+  std::cout << "Работа сервера завершена.\n";
+  Exit = true;
+  exit(EXIT_SUCCESS);
+}
+
 void chooseAction() {
+  // To exit
+  signal(SIGINT, exitHandler);
   std::cout << "Какое действие сделать? (Напишите число)\n"
                "  1 - Создать тест и запустить его\n"
                "  2 - Создать тест и сохранить в файле\n"

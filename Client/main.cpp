@@ -85,8 +85,9 @@ static void parseCmdLine(int Argc, char **Argv) {
     printHelp(Argv[0], 1);
   }
   if (!ServerHostname.has_value()) {
-    std::cerr << "Server-hostname must be provided\n\n";
-    printHelp(Argv[0], 1);
+    ServerHostname = "localhost";
+    std::cerr << "Server-hostname must be provided. Using default hostname: "
+                 "localhost\n\n";
   }
 }
 
