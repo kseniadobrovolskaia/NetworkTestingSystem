@@ -117,14 +117,41 @@ void serveTheClient(int sockfd, const std::string &TestStr,
       "ERROR writing to socket");
 }
 
+/**
+ * @brief getUnsignedFromStr - it helps get number and process incorrect values,
+ *                             which are given for unsigned argument.
+ */
+static unsigned getUnsignedFromStr() {
+  std::string GivenValue;
+  unsigned TryValue;
+  std::getline(std::cin, GivenValue);
+  // find sign
+  // return stoi(GivenValue);
+  auto FirstLetter = GivenValue.begin();
+  while (isspace((unsigned char)*FirstLetter))
+    ++FirstLetter;
+  char Sign = *FirstLetter;
+  char *Endptr; //  Store the location where conversion stopped
+  TryValue = strtoul(GivenValue.c_str() +
+                         std::distance(GivenValue.begin(), FirstLetter),
+                     &Endptr, /* base */ 10);
+
+  if (GivenValue == Endptr)
+    failWithError("Invalid number provided");
+  else if (*Endptr)
+    failWithError("Extra text after number");
+  else if (Sign == '-' && TryValue != 0)
+    failWithError("Negative number");
+  return TryValue;
+}
+
 static TestSystem::OneAnswerQuestion getQuestion(unsigned NumQuestion) {
   TestSystem::OneAnswerQuestion Q;
   std::cout << "Введите вопрос номер " << NumQuestion << ":\n";
-  getline(std::cin, Q.formulation());
+  std::getline(std::cin, Q.formulation());
   std::cout << "Введите количество предлагаемых ответов:\n";
-  int CountAnswers;
-  std::cin >> CountAnswers;
-  getchar();
+  unsigned CountAnswers;
+  CountAnswers = getUnsignedFromStr();
   std::vector<std::string> Answers(CountAnswers);
   std::generate(Answers.begin(), Answers.end(), [NumAns = 0]() mutable {
     std::cout << "Введите вариант ответа номер " << ++NumAns << ":\n";
@@ -136,12 +163,12 @@ static TestSystem::OneAnswerQuestion getQuestion(unsigned NumQuestion) {
 
   std::cout << "Введите номер правильного ответа:\n";
   int NumCorrectAns;
-  std::cin >> NumCorrectAns;
-  getchar();
+  NumCorrectAns = getUnsignedFromStr();
+  if (NumCorrectAns > Answers.size())
+    failWithError("Нет такого варианта ответа");
   Q.correctAnswer() = Answers.at(NumCorrectAns - 1);
 
   std::cout << "Вопрос номер " << NumQuestion << " добавлен.\n\n";
-
   return Q;
 }
 
@@ -153,15 +180,13 @@ static TestSystem::TestPaper getTestPaper() {
   unsigned NumQuestion = 0;
   bool isMoreQuestions = true;
   std::vector<TestSystem::OneAnswerQuestion> Questions;
-
   while (isMoreQuestions) {
     Questions.emplace_back(getQuestion(++NumQuestion));
     std::cout << "Какое действие сделать? (Напишите число)\n"
                  "  1 - Добавить ещё вопрос\n"
                  "  2 - Завершить создание теста\n";
-    int Ans;
-    std::cin >> Ans;
-    getchar();
+    unsigned Ans;
+    Ans = getUnsignedFromStr();
     switch (Ans) {
     case 1:
       continue;
@@ -178,10 +203,10 @@ static TestSystem::TestPaper getTestPaper() {
 }
 
 static unsigned getPort() {
-  unsigned portno;
   std::cout << "Введите номер порта:\n";
-  std::cin >> portno;
-  return portno;
+  unsigned Port;
+  Port = getUnsignedFromStr();
+  return Port;
 }
 
 void createAction() {
@@ -193,9 +218,9 @@ void createAction() {
 void saveAction() {
   TestSystem::TestPaper Test = getTestPaper();
 
-  std::string FileName;
   std::cout << "Введите название файла для сохранения:\n";
-  std::cin >> FileName;
+  std::string FileName;
+  getline(std::cin, FileName);
 
   std::ofstream File(FileName);
   nlohmann::json Json;
@@ -223,7 +248,7 @@ void runFromFileAction(const std::string &TestFile, unsigned Port) {
 static void runFromFileAction() {
   std::cout << "Введите путь до файла с тестом:\n";
   std::string FilePath;
-  std::cin >> FilePath;
+  getline(std::cin, FilePath);
 
   runFromFileAction(FilePath, getPort());
 }
@@ -235,9 +260,8 @@ void chooseAction() {
                "  1 - Создать тест и запустить его\n"
                "  2 - Создать тест и сохранить в файле\n"
                "  3 - Запустить тест из файлa\n";
-  int Ans;
-  std::cin >> Ans;
-  getchar();
+  unsigned Ans;
+  Ans = getUnsignedFromStr();
   switch (Ans) {
   case 1:
     createAction();
