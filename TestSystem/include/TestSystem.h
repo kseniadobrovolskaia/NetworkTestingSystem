@@ -26,8 +26,7 @@ public:
 void to_json(nlohmann::json &J, const Question &Q);
 void from_json(const nlohmann::json &J, Question &Q);
 
-//_______________________________One Answer
-//Question_____________________________________
+//_______________________________One_Answer_Question_____________________________________
 
 class OneAnswerQuestion : public Question {
   std::vector<std::string> Answers;
@@ -36,7 +35,6 @@ class OneAnswerQuestion : public Question {
 
 public:
   OneAnswerQuestion() = default;
-  // OneAnswerQuestion(const nlohmann::json &J) { fromJson(J); }
   OneAnswerQuestion(const std::vector<std::string> &Answers,
                     const std::string &CorrectAnswer, std::string Formulation)
       : Answers(Answers), CorrectAnswer(CorrectAnswer),
@@ -77,8 +75,7 @@ public:
   }
 };
 
-//___________________________________Test
-//Paper__________________________________________
+//___________________________________Test_Paper__________________________________________
 
 class TestPaper {
   std::vector<OneAnswerQuestion> Questions;
@@ -92,9 +89,6 @@ public:
   std::vector<OneAnswerQuestion> &questions() { return Questions; }
   size_t countQuestions() const { return Questions.size(); }
 
-  // void addQuestion(const OneAnswerQuestion &Q) {
-  // Questions.emplace_back(std::make_unique(Q)); }
-
   void print() const {
     std::cout << "Test Name : " << Name << "\n";
     std::cout << "Questions :\n";
@@ -107,7 +101,6 @@ public:
   }
 
   // To work with json parsing
-
   void toJson(nlohmann::json &J) const {
     J["TestName"] = Name;
     J["Questions"] = Questions;
@@ -121,24 +114,5 @@ public:
 
 void to_json(nlohmann::json &J, const TestPaper &T);
 void from_json(const nlohmann::json &J, TestPaper &T);
-
-//_____________________________________Answer____________________________________________
-
-class Answer {
-  std::string Ans;
-
-public:
-  Answer(const std::string &Ans) : Ans(Ans){};
-};
-
-//__________________________________Answer
-//Paper_________________________________________
-
-class AnswerPaper {
-  std::vector<Answer> Answers;
-
-public:
-  AnswerPaper(const std::vector<Answer> Answers) : Answers(Answers){};
-};
 
 } // namespace TestSystem

@@ -6,79 +6,96 @@ void failWithError(const std::string &Msg) {
   throw std::logic_error("\n\n" + Msg);
 }
 
-void startTesting(unsigned Port, const std::string &ServerHostname) {
-  int sockfd, n;
-  struct sockaddr_in serv_addr;
-  struct hostent *server;
+static void printAnswers(const std::vector<unsigned> &Answers) {
+  std::for_each(Answers.begin(), Answers.end(),
+                [](const auto &Ans) { std::cout << Ans + 1 << " "; });
+  std::cout << "\n";
+}
 
-  sockfd = socket(AF_INET, SOCK_STREAM, 0);
-  if (sockfd < 0)
-    failWithError("ERROR opening socket");
-  server = gethostbyname(ServerHostname.c_str());
-  if (server == NULL)
-    failWithError("ERROR, no such host\n");
-  bzero((char *)&serv_addr, sizeof(serv_addr));
-  serv_addr.sin_family = AF_INET;
-  bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr,
-        server->h_length);
-  serv_addr.sin_port = htons(Port);
-  if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-    failWithError("ERROR connecting");
+static void writeWithCheck(int Fd, const void *Buf, size_t Count,
+                           const std::string &Msg) {
+  if (write(Fd, Buf, Count) < 0)
+    failWithError(Msg);
+}
+
+static void readWithCheck(int Fd, void *Buf, size_t Count,
+                          const std::string &Msg) {
+  if (read(Fd, Buf, Count) < 0)
+    failWithError(Msg);
+}
+
+static sockaddr_in fillServerData(unsigned Port,
+                                  const std::string &ServerHostname) {
+  auto Server = gethostbyname(ServerHostname.c_str());
+  if (Server == NULL)
+    failWithError("Error, no such host\n");
+  sockaddr_in ServerAddr;
+  bzero((char *)&ServerAddr, sizeof(ServerAddr));
+  ServerAddr.sin_family = AF_INET;
+  bcopy((char *)Server->h_addr, (char *)&ServerAddr.sin_addr.s_addr,
+        Server->h_length);
+  ServerAddr.sin_port = htons(Port);
+  return ServerAddr;
+}
+
+static std::vector<unsigned>
+getAnswersFromGUIWindow(const TestSystem::TestPaper &Test) {
+  int Argc = 0;
+  char **Argv;
+  Glib::RefPtr<Gtk::Application> Application =
+      Gtk::Application::create(Argc, Argv, "org.gtkmm.example");
+
+  GUI::TestWindow Window(Test);
+  std::cout << "Please choose answers on test in window :D\n\n";
+  Application->run(Window);
+
+  return Window.getFinalResults();
+}
+
+void startTesting(unsigned Port, const std::string &ServerHostname) {
+  auto SockFd = socket(AF_INET, SOCK_STREAM, 0);
+  if (SockFd < 0)
+    failWithError("Error opening socket");
+
+  auto ServerAddr = fillServerData(Port, ServerHostname);
+
+  // Connect to Server
+  if (connect(SockFd, (sockaddr *)&ServerAddr, sizeof(ServerAddr)) < 0)
+    failWithError("Error connecting");
 
   // Test recives
+  constexpr auto MaxTestSize = 10000u;
+  char TestStr[MaxTestSize];
+  readWithCheck(SockFd, reinterpret_cast<char *>(TestStr), MaxTestSize,
+                "Error reading from socket");
+  nlohmann::json TestData = nlohmann::json::parse(TestStr);
+  auto Test = TestData.template get<TestSystem::TestPaper>();
 
-  char str[10000];
-  size_t size;
-  n = read(sockfd, reinterpret_cast<char *>(str), sizeof(str));
-  nlohmann::json data = nlohmann::json::parse(str);
-  if (n < 0)
-    failWithError("ERROR reading from socket");
-
-  std::cout << "Please choose answers on test in window :D\n\n";
-  // Convert json format test to GUI and open GUI_Window
-
-  int argc = 0;
-  char **argv;
-  Glib::RefPtr<Gtk::Application> app =
-      Gtk::Application::create(argc, argv, "org.gtkmm.example");
-
-  auto Test = data.template get<TestSystem::TestPaper>();
-  GUI::TestWindow Window(Test);
-
-  // Answers using GUI
-  app->run(Window);
-
-  // Send results
-  auto FinalResults = Window.getFinalResults();
-  n = write(sockfd, FinalResults.data(), sizeof(FinalResults));
-  if (n < 0)
-    failWithError("ERROR writing to socket");
+  // Answer using GUI
+  auto FinalResults = getAnswersFromGUIWindow(Test);
 
   std::cout << "Your answers: ";
-  for (auto A : FinalResults)
-    std::cout << A + 1 << " ";
+  printAnswers(FinalResults);
+
+  // Give answers to the Server for checking
+  writeWithCheck(SockFd, FinalResults.data(), sizeof(FinalResults),
+                 "Error writing to socket");
 
   // Recive rignt answers
-  std::vector<unsigned> right_answers(FinalResults.size());
-  n = read(sockfd, right_answers.data(), sizeof(FinalResults));
-  if (n < 0)
-    failWithError("ERROR reading from socket");
+  std::vector<unsigned> RightAnswers(FinalResults.size());
+  readWithCheck(SockFd, RightAnswers.data(), sizeof(FinalResults),
+                "Error reading from socket");
 
-  std::cout << "\nRight answers: ";
-  for (auto A : right_answers)
-    std::cout << A + 1 << " ";
-  std::cout << "\n";
+  std::cout << "Right answers: ";
+  printAnswers(RightAnswers);
 
   // Recive mark
-  char mark[2];
-  n = read(sockfd, mark, 1);
-  mark[1] = '\0';
-  if (n < 0)
-    failWithError("ERROR reading from socket");
+  char Mark;
+  readWithCheck(SockFd, &Mark, /* size */ 1, "Error reading from socket");
 
-  std::cout << "\n\nYour mark " << mark << "!\n";
+  std::cout << "\nYour mark " << Mark << "!\n";
 
-  close(sockfd);
+  close(SockFd);
 }
 
 } // namespace TestClient

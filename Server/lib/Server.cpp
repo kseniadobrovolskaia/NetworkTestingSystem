@@ -9,8 +9,8 @@ void failWithError(const std::string &Msg) {
 
 int calculateMark(std::vector<unsigned> ClientAnswers,
                   std::vector<unsigned> CorrectAnswers) {
-  constexpr unsigned BestMark = 5;
-  unsigned NumOfCorrect = 0;
+  constexpr auto BestMark = 5u;
+  auto NumOfCorrect = 0u;
 
   for (auto NumAns = 0; NumAns < ClientAnswers.size(); ++NumAns)
     NumOfCorrect += (ClientAnswers.at(NumAns) == CorrectAnswers.at(NumAns));
@@ -20,12 +20,9 @@ int calculateMark(std::vector<unsigned> ClientAnswers,
 
 // To shut down the server.
 // Set in the SIG_INT signal handler.
-volatile bool Exit = false;
+volatile auto Exit = false;
 
-static void runTest(TestSystem::TestPaper &Test, unsigned portno) {
-  // This is a reasonable value for the number of clients
-  // waiting for a response from the server on many platforms.
-  constexpr unsigned MaxClientsQueue = 5;
+static void runTest(TestSystem::TestPaper &Test, unsigned Port) {
   // Delete correct answers and save them in vector
   std::vector<unsigned> CorrectAnswers;
   CorrectAnswers.reserve(Test.questions().size());
@@ -39,82 +36,86 @@ static void runTest(TestSystem::TestPaper &Test, unsigned portno) {
     Q.correctAnswer() = "";
   }
   // Prepare test in string format
-  nlohmann::json newJson = Test;
-  to_json(newJson, Test);
-  std::string TestStr = newJson.dump();
+  nlohmann::json JsonTest = Test;
+  to_json(JsonTest, Test);
+  auto TestStr = JsonTest.dump();
 
   // Socket to accept client's connections
-  int sockfd, newsockfd, pid;
-  socklen_t clilen;
-  struct sockaddr_in serv_addr, cli_addr;
+  auto ListenSockFd = socket(AF_INET, SOCK_STREAM, 0);
+  if (ListenSockFd < 0)
+    failWithError("Error opening socket");
+  // Fill Server data
+  sockaddr_in ServerAddr, ClientAddr;
+  bzero((char *)&ServerAddr, sizeof(ServerAddr));
+  ServerAddr.sin_family = AF_INET;
+  ServerAddr.sin_addr.s_addr = INADDR_ANY;
+  ServerAddr.sin_port = htons(Port);
 
-  sockfd = socket(AF_INET, SOCK_STREAM, 0);
-  if (sockfd < 0)
-    failWithError("ERROR opening socket");
-  bzero((char *)&serv_addr, sizeof(serv_addr));
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_addr.s_addr = INADDR_ANY;
-  serv_addr.sin_port = htons(portno);
-  if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-    failWithError("ERROR on binding");
-  listen(sockfd, 5);
-  clilen = sizeof(cli_addr);
+  if (bind(ListenSockFd, (sockaddr *)&ServerAddr, sizeof(ServerAddr)) < 0)
+    failWithError("Error on binding");
+
+  // This is a reasonable value for the number of clients
+  // waiting for a response from the server on many platforms.
+  constexpr unsigned MaxClientsQueue = 5;
+  listen(ListenSockFd, MaxClientsQueue);
+  socklen_t ClientSize = sizeof(ClientAddr);
 
   std::cout << "Тест запущен!\n";
   // To kill zombie child processes
   signal(SIGCHLD, SIG_IGN);
   while (!Exit) {
-    newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
-    if (newsockfd < 0)
-      failWithError("ERROR on accept");
-    pid = fork();
-    if (pid < 0)
-      failWithError("ERROR on fork");
-    if (pid == 0) {
-      close(sockfd);
-      serveTheClient(newsockfd, TestStr, CorrectAnswers);
+    auto AcceptSockFd =
+        accept(ListenSockFd, (sockaddr *)&ClientAddr, &ClientSize);
+    if (AcceptSockFd < 0)
+      failWithError("Error on accept");
+    auto Pid = fork();
+    if (Pid < 0)
+      failWithError("Error on fork");
+    if (Pid == 0) {
+      close(ListenSockFd);
+      serveTheClient(AcceptSockFd, TestStr, CorrectAnswers);
       exit(EXIT_SUCCESS);
     } else
-      close(newsockfd);
+      close(AcceptSockFd);
   }
 
-  close(sockfd);
+  close(ListenSockFd);
 }
 
-static void writeWithCheck(int fd, const void *buf, size_t count,
+static void writeWithCheck(int Fd, const void *Buf, size_t Count,
                            const std::string &Msg) {
-  if (write(fd, buf, count) < 0)
+  if (write(Fd, Buf, Count) < 0)
     failWithError(Msg);
 }
 
-static void readWithCheck(int fd, void *buf, size_t count,
+static void readWithCheck(int Fd, void *Buf, size_t Count,
                           const std::string &Msg) {
-  if (read(fd, buf, count) < 0)
+  if (read(Fd, Buf, Count) < 0)
     failWithError(Msg);
 }
 
 // There is a function for each connection. It handles all
 // communication once a connnection has been established.
-void serveTheClient(int sockfd, const std::string &TestStr,
+void serveTheClient(int SockFd, const std::string &TestStr,
                     const std::vector<unsigned> &CorrectAnswers) {
   // Send test without right answers
-  writeWithCheck(sockfd, TestStr.c_str(), TestStr.size(),
-                 "ERROR writing to socket");
+  writeWithCheck(SockFd, TestStr.c_str(), TestStr.size(),
+                 "Error writing to socket");
 
   // Read Answer
   std::vector<unsigned> ClientAnswers(CorrectAnswers.size());
-  readWithCheck(sockfd, ClientAnswers.data(), sizeof(CorrectAnswers),
-                "ERROR reading from socket");
+  readWithCheck(SockFd, ClientAnswers.data(), sizeof(CorrectAnswers),
+                "Error reading from socket");
 
   // Send right answers
-  writeWithCheck(sockfd, CorrectAnswers.data(), sizeof(CorrectAnswers),
-                 "ERROR writing to socket");
+  writeWithCheck(SockFd, CorrectAnswers.data(), sizeof(CorrectAnswers),
+                 "Error writing to socket");
 
   // Send mark
   writeWithCheck(
-      sockfd,
-      std::to_string(calculateMark(ClientAnswers, CorrectAnswers)).c_str(), 1,
-      "ERROR writing to socket");
+      SockFd,
+      std::to_string(calculateMark(ClientAnswers, CorrectAnswers)).c_str(),
+      /* Size */ 1, "Error writing to socket");
 }
 
 /**
@@ -123,18 +124,17 @@ void serveTheClient(int sockfd, const std::string &TestStr,
  */
 static unsigned getUnsignedFromStr() {
   std::string GivenValue;
-  unsigned TryValue;
   std::getline(std::cin, GivenValue);
   // find sign
   // return stoi(GivenValue);
   auto FirstLetter = GivenValue.begin();
   while (isspace((unsigned char)*FirstLetter))
     ++FirstLetter;
-  char Sign = *FirstLetter;
+  auto Sign = *FirstLetter;
   char *Endptr; //  Store the location where conversion stopped
-  TryValue = strtoul(GivenValue.c_str() +
-                         std::distance(GivenValue.begin(), FirstLetter),
-                     &Endptr, /* base */ 10);
+  auto TryValue = strtoul(GivenValue.c_str() +
+                              std::distance(GivenValue.begin(), FirstLetter),
+                          &Endptr, /* base */ 10);
 
   if (GivenValue == Endptr)
     failWithError("Invalid number provided");
@@ -150,8 +150,7 @@ static TestSystem::OneAnswerQuestion getQuestion(unsigned NumQuestion) {
   std::cout << "Введите вопрос номер " << NumQuestion << ":\n";
   std::getline(std::cin, Q.formulation());
   std::cout << "Введите количество предлагаемых ответов:\n";
-  unsigned CountAnswers;
-  CountAnswers = getUnsignedFromStr();
+  auto CountAnswers = getUnsignedFromStr();
   std::vector<std::string> Answers(CountAnswers);
   std::generate(Answers.begin(), Answers.end(), [NumAns = 0]() mutable {
     std::cout << "Введите вариант ответа номер " << ++NumAns << ":\n";
@@ -162,8 +161,7 @@ static TestSystem::OneAnswerQuestion getQuestion(unsigned NumQuestion) {
   Q.answers() = Answers;
 
   std::cout << "Введите номер правильного ответа:\n";
-  int NumCorrectAns;
-  NumCorrectAns = getUnsignedFromStr();
+  auto NumCorrectAns = getUnsignedFromStr();
   if (NumCorrectAns > Answers.size())
     failWithError("Нет такого варианта ответа");
   Q.correctAnswer() = Answers.at(NumCorrectAns - 1);
@@ -177,16 +175,15 @@ static TestSystem::TestPaper getTestPaper() {
   std::string Name;
   getline(std::cin, Name);
   TestSystem::TestPaper Test(Name);
-  unsigned NumQuestion = 0;
-  bool isMoreQuestions = true;
+  auto NumQuestion = 0u;
+  auto isMoreQuestions = true;
   std::vector<TestSystem::OneAnswerQuestion> Questions;
   while (isMoreQuestions) {
     Questions.emplace_back(getQuestion(++NumQuestion));
     std::cout << "Какое действие сделать? (Напишите число)\n"
                  "  1 - Добавить ещё вопрос\n"
                  "  2 - Завершить создание теста\n";
-    unsigned Ans;
-    Ans = getUnsignedFromStr();
+    auto Ans = getUnsignedFromStr();
     switch (Ans) {
     case 1:
       continue;
@@ -204,28 +201,27 @@ static TestSystem::TestPaper getTestPaper() {
 
 static unsigned getPort() {
   std::cout << "Введите номер порта:\n";
-  unsigned Port;
-  Port = getUnsignedFromStr();
+  auto Port = getUnsignedFromStr();
   return Port;
 }
 
 void createAction() {
-  TestSystem::TestPaper Test = getTestPaper();
+  auto Test = getTestPaper();
 
   runTest(Test, getPort());
 }
 
 void saveAction() {
-  TestSystem::TestPaper Test = getTestPaper();
+  auto Test = getTestPaper();
 
   std::cout << "Введите название файла для сохранения:\n";
   std::string FileName;
   getline(std::cin, FileName);
 
-  std::ofstream File(FileName);
+  std::ofstream OutFile(FileName);
   nlohmann::json Json;
   to_json(Json, Test);
-  File << std::setw(4) << Json << "\n";
+  OutFile << std::setw(4) << Json << "\n";
   std::cout << "Тест сохранён в файле " << FileName << ".\n";
 }
 
@@ -238,10 +234,10 @@ void exitHandler(int Signo) {
 void runFromFileAction(const std::string &TestFile, unsigned Port) {
   // To exit
   signal(SIGINT, exitHandler);
-  std::ifstream f(TestFile);
-  nlohmann::json data = nlohmann::json::parse(f);
+  std::ifstream InFile(TestFile);
+  auto TestData = nlohmann::json::parse(InFile);
 
-  auto Test = data.template get<TestSystem::TestPaper>();
+  auto Test = TestData.template get<TestSystem::TestPaper>();
   runTest(Test, Port);
 }
 
@@ -260,8 +256,7 @@ void chooseAction() {
                "  1 - Создать тест и запустить его\n"
                "  2 - Создать тест и сохранить в файле\n"
                "  3 - Запустить тест из файлa\n";
-  unsigned Ans;
-  Ans = getUnsignedFromStr();
+  auto Ans = getUnsignedFromStr();
   switch (Ans) {
   case 1:
     createAction();
